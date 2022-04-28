@@ -1,9 +1,9 @@
-import requests
-import json
 from handlers import *
 
+# the token is given by BotFather bot
 token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
-handlers = {
+# command: function to call. All these functions are in handlers module
+handlers_dict = {
             '/start': 'start_handler',
             '/restart': 'start_handler',
             '/book': 'book_handler',
@@ -13,7 +13,36 @@ handlers = {
             }
 
 
+def message_handler(message: json) -> (int, str, str):
+    """
+    Works on a data from Telegram server update
+    """
+    if 'callback_query' in message:
+        data = message['callback_query']['data']
+        for i in range(len(data)):
+            if data[i].isspace():
+                command = data[:i]
+                additional = data[i + 1:]
+                break
+        else:
+            command = data
+            additional = None
+        chat = message['callback_query']['message']['chat']['id']
+    elif 'message' in message:
+        command = message['message']['text']
+        chat = message['message']['chat']['id']
+        additional = None
+    else:
+        command = message['message']['text']
+        chat = message['message']['chat']['id']
+        additional = None
+    return chat, command, additional
+
+
 def wrong_command(chat_id):
+    """
+    Called when the bot doesn't know the command taken from a user. Sends a message.
+    """
     header = {'Content-Type': 'application/json'}
     params = {
         'chat_id': chat_id,
@@ -49,31 +78,39 @@ def set_commands():
         }
     ]}
     data = json.dumps(data_to_set)
-    requests.post(f'https://api.telegram.org/bot{token}/setMyCommands', headers=header, data=data)
+    try:
+        requests.post(f'https://api.telegram.org/bot{token}/setMyCommands', headers=header, data=data)
+    except Exception:
+        print("Can't set commands")
 
 
 def get_updates():
+    """
+    Basic function with the main endless loop. Gets update from the Telegram server.
+    """
     params = {
         'offset': 0,
         'timeout': 2
     }
     while True:
-        response = requests.post(f'https://api.telegram.org/bot{token}/getUpdates', params=params)
+        try:
+            response = requests.post(f'https://api.telegram.org/bot{token}/getUpdates', params=params)
+        except Exception:
+            print("For some reason can't get updates from the Telegram server")
+            continue
         updates = response.json()
+        if response.status_code != 200 or updates['ok'] == False:
+            print("For some reason can't get updates from the Telegram server")
+            continue
         if updates['result']:
             for new_message in updates['result']:
                 print(new_message)
-                if 'callback_query' in new_message:
-                    text = new_message['callback_query']['data']
-                    chat = new_message['callback_query']['message']['chat']['id']
-                elif 'message' in new_message:
-                    text = new_message['message']['text']
-                    chat = new_message['message']['chat']['id']
-            if text in handlers:
-                handler_to_call = handlers[text]
-                globals()[handler_to_call](chat)
-            else:
-                wrong_command(chat)
+                chat, command, additional_info = message_handler(new_message)
+                if command in handlers_dict:
+                    handler_to_call = handlers_dict[command]
+                    globals()[handler_to_call](chat, additional_info)
+                else:
+                    wrong_command(chat)
             last_id = updates['result'][-1]['update_id']
             params['offset'] = last_id + 1
 
