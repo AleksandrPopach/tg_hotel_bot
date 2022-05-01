@@ -9,11 +9,12 @@ handlers_dict = {
             '/book': 'book_handler',
             '/info': 'info_handler',
             '/vacant': 'vacant_handler',
-            '/my_suits': 'suits_handler'
+            '/my_suits': 'show_suits_handler',
+            '/delete': 'delete_suits_handler'
             }
 
 
-def message_handler(message: json) -> (int, str, str):
+def message_handler(message: json) -> (int, str, str, int, str, str):
     """
     Works on a data from Telegram server update
     """
@@ -28,15 +29,24 @@ def message_handler(message: json) -> (int, str, str):
             command = data
             additional = None
         chat = message['callback_query']['message']['chat']['id']
+        user_id = message['callback_query']['from']['id']
+        user_first_name = message['callback_query']['from']['first_name']
+        user_last_name = message['callback_query']['from']['last_name']
     elif 'message' in message:
         command = message['message']['text']
         chat = message['message']['chat']['id']
         additional = None
+        user_id = message['message']['from']['id']
+        user_first_name = message['message']['from']['first_name']
+        user_last_name = message['message']['from']['last_name']
     else:
         command = message['message']['text']
         chat = message['message']['chat']['id']
         additional = None
-    return chat, command, additional
+        user_id = message['message']['from']['id']
+        user_first_name = message['message']['from']['first_name']
+        user_last_name = message['message']['from']['last_name']
+    return chat, command, additional, user_id, user_first_name, user_last_name
 
 
 def wrong_command(chat_id):
@@ -73,6 +83,10 @@ def set_commands():
             "description": "Мои забронированнные номера"
         },
         {
+            "command": "delete",
+            "description": "Удалить забронированнные номера"
+        },
+        {
             "command": "restart",
             "description": "Начать сначала"
         }
@@ -105,12 +119,17 @@ def get_updates():
         if updates['result']:
             for new_message in updates['result']:
                 print(new_message)
-                chat, command, additional_info = message_handler(new_message)
+                chat, command, additional_info, *user = message_handler(new_message)
                 if command in handlers_dict:
                     handler_to_call = handlers_dict[command]
-                    globals()[handler_to_call](chat, additional_info)
+                    try:
+                        globals()[handler_to_call](chat, command, additional_info, user)
+                    except Exception:
+                        print('Error when a function is running')
+                        wrong_command(chat)
                 else:
                     wrong_command(chat)
+            # marks the last message of the update as seen and handled (in order to not handle them again)
             last_id = updates['result'][-1]['update_id']
             params['offset'] = last_id + 1
 
