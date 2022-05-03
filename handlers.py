@@ -6,7 +6,11 @@ token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
 
 
 def personal_data_handler(chat_id, user):
-    print(user)
+    pass
+
+
+def set_dates(*args):
+    pass
 
 
 def pull_data_from_db(query: str) -> list:
@@ -28,9 +32,12 @@ def pull_data_from_db(query: str) -> list:
     return hotels
 
 
-def send_list_of_hotels_or_suits(chat_id, command, is_suit=False):
-    if is_suit:
-        items = pull_data_from_db('SELECT name FROM suit;')
+def send_list_of_hotels_or_suits(chat_id, command, hotel=None):
+    if hotel:
+        # if the hotel is defined by the user, then we show which suits are available at the moment
+        items = pull_data_from_db(f"SELECT suit.name FROM suit JOIN hotel_suit ON suit.id = hotel_suit.suit_id \
+        JOIN hotel ON hotel.id = hotel_suit.hotel_id WHERE hotel.name = '{hotel}' AND vacant_amount != 0 \
+        ORDER BY hotel.id, suit.id;")
     else:
         items = pull_data_from_db('SELECT name FROM hotel;')
     names = [c[0] for c in items]
@@ -42,7 +49,7 @@ def send_list_of_hotels_or_suits(chat_id, command, is_suit=False):
         button_content["callback_data"] = command + " " + names[i]
         button.append(button_content)
         keyboard.append(button)
-    text = 'Выберите номер:' if is_suit else 'Выберите отель:'
+    text = 'Выберите номер:' if hotel else 'Выберите отель:'
     params = {
         'chat_id': chat_id,
         'text': text,
@@ -83,7 +90,8 @@ def start_handler(chat_id, *args):
     requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
 
 
-def book_handler(chat_id, command, name, user):
+def book_handler(chat_id, command, name, user: list):
+    user = tuple(user)
     if name:
         con = psycopg2.connect(
             database="hotels",
@@ -95,13 +103,24 @@ def book_handler(chat_id, command, name, user):
         cur = con.cursor()
         cur.execute('SELECT name FROM hotel')
         hotels = cur.fetchall()
+        cur.close()
         for hotel in hotels:
             if name == hotel[0]:
-                send_list_of_hotels_or_suits(chat_id, command, True)
-                cur.close()
+                cur2 = con.cursor()
+                cur2.execute('SELECT id FROM client')
+                client_ids = [c[0] for c in cur2.fetchall()]
+                if user[0] not in client_ids:
+                    sql = "INSERT INTO client (id, first_name, last_name) VALUES (%s, %s, %s);"
+                    cur2.execute(sql, user)
+                # TODO: добавить запись к табл заказов
+                con.commit()
+                cur2.close()
                 con.close()
+                send_list_of_hotels_or_suits(chat_id, command, name)
                 break
         else:
+            # TODO:
+            # name - номер. Коннектимся к бд, добавляем номер к записи, вызываем функции personal data и set dates
             params = {
                 'chat_id': chat_id,
                 'text': f'Вы успешно забронировали {name} номер!'
@@ -110,7 +129,6 @@ def book_handler(chat_id, command, name, user):
             data = json.dumps(params)
             requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
     else:
-        personal_data_handler(chat_id, user)
         send_list_of_hotels_or_suits(chat_id, command)
 
 
