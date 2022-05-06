@@ -124,8 +124,8 @@ def get_updates():
                     handler_to_call = handlers_dict[command]
                     try:
                         globals()[handler_to_call](chat, command, additional_info, user)
-                    except Exception as x:
-                        print('Error when a function is running', x)
+                    except Exception as info:
+                        print('Error when a function is running.', info)
                         wrong_command(chat)
                 else:
                     wrong_command(chat)

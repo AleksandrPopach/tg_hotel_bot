@@ -5,6 +5,10 @@ import psycopg2
 token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
 
 
+def trash_cleaner(*args):
+    pass
+
+
 def personal_data_handler(chat_id, user):
     pass
 
@@ -47,6 +51,8 @@ def send_list_of_hotels_or_suits(chat_id, command, hotel=None):
         button_content = dict()
         button_content["text"] = names[i]
         button_content["callback_data"] = command + " " + names[i]
+        if hotel:
+            button_content["callback_data"] = button_content["callback_data"] + " " + hotel
         button.append(button_content)
         keyboard.append(button)
     text = 'Выберите номер:' if hotel else 'Выберите отель:'
@@ -91,6 +97,11 @@ def start_handler(chat_id, *args):
 
 
 def book_handler(chat_id, command, name, user: list):
+    """
+    Allow the user to book a suit. Sets connection to the db and add data to it.
+    :param name: If not None, it can be either the name of a hotel or a composite string 'suit + hotel'.
+    :param user: list of the user's id and full name.
+    """
     user = tuple(user)
     if name:
         con = psycopg2.connect(
@@ -107,28 +118,48 @@ def book_handler(chat_id, command, name, user: list):
         for hotel in hotels:
             if name == hotel[0]:
                 cur2 = con.cursor()
-                cur2.execute('SELECT id FROM client')
+                cur2.execute('SELECT id FROM client;')
                 client_ids = [c[0] for c in cur2.fetchall()]
                 if user[0] not in client_ids:
                     sql = "INSERT INTO client (id, first_name, last_name) VALUES (%s, %s, %s);"
                     cur2.execute(sql, user)
-                # TODO: добавить запись к табл заказов
-                con.commit()
                 cur2.close()
+                con.commit()
                 con.close()
                 send_list_of_hotels_or_suits(chat_id, command, name)
                 break
         else:
-            # TODO:
-            # name - номер. Коннектимся к бд, добавляем номер к записи, вызываем функции personal data и set dates
+            # name == 'suit + " " + hotel'
+            for i in range(len(name)):
+                if name[i].isspace():
+                    suit = name[:i]
+                    hotel = name[i + 1:]
+                    break
+            else:
+                # never get here, just for a good measure
+                suit = hotel = 'Неизвестно'
+
+            user_id = user[0]
+            cur2 = con.cursor()
+            cur2.execute(f"SELECT id FROM hotel WHERE name = '{hotel}';")
+            hotel_id = cur2.fetchone()[0]
+            cur2.execute(f"SELECT id FROM suit WHERE name = '{suit}';")
+            suit_id = cur2.fetchone()[0]
+            sql = 'INSERT INTO book (client_id, hotel_id, suit_id) VALUES (%s, %s, %s);'
+            cur2.execute(sql, (user_id, hotel_id, suit_id))
+            cur2.close()
+            con.commit()
+            con.close()
+
             params = {
                 'chat_id': chat_id,
-                'text': f'Вы успешно забронировали {name} номер!'
+                'text': f'Вы успешно забронировали {suit.lower()} номер в отеле {hotel}!'
             }
             header = {'Content-Type': 'application/json'}
             data = json.dumps(params)
             requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
     else:
+        # name == None
         send_list_of_hotels_or_suits(chat_id, command)
 
 
