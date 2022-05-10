@@ -1,20 +1,104 @@
 import requests
 import json
 import psycopg2
+import re
+from datetime import date
 
 token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
 
 
-def trash_cleaner(*args):
-    pass
+def incorrect_data(chat_id):
+    """
+    Called when the data sent by the user is invalid. Sends a message.
+    """
+    header = {'Content-Type': 'application/json'}
+    params = {
+        'chat_id': chat_id,
+        'text': "Вы ввели некорректные данные! Внимательно читайте указания и попробуйте снова."
+    }
+    data = json.dumps(params)
+    requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
 
 
-def personal_data_handler(chat_id, user):
-    pass
+def correct_db(user_id: int):
+    """
+    Deletes from db all incomplete bookings made by the user. Corrects the amount of vacant suits.
+    """
+    con = psycopg2.connect(
+        database="hotels",
+        user="bra1n",
+        password="050888",
+        host="localhost",
+        port="5432"
+    )
+    cur = con.cursor()
+    cur.execute(f"DELETE FROM book WHERE id IN (SELECT id FROM book \
+    WHERE client_id = {user_id} AND (arrival_date IS NULL or departure_date IS NULL))")
+    cur.execute(f"UPDATE hotel_suit SET vacant_amount = vacant_amount - 1 WHERE \
+    hotel_id = (SELECT hotel_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1) AND \
+    suit_id = (SELECT suit_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1)")
+    cur.close()
+    con.commit()
+    con.close()
 
 
-def set_dates(*args):
-    pass
+def set_dates(chat_id, command, additional_info, user):
+    def is_valid_date(date_to_check: str):
+        pattern = r'\d\d-\d\d-\d\d\d\d'
+        check = re.match(pattern, date_to_check)
+        if not check:
+            return False
+        day, month, year = list(map(int, date_to_check.split('-')))
+        try:
+            date(year, month, day)
+        except ValueError:
+            return False
+        else:
+            return True
+
+    if 'begin' in additional_info:
+        date_to_add = additional_info[:-6].strip()
+        column = 'arrival_date'
+        text = 'Введите желаемую дату окончания заезда в формате ДД-ММ-ГГГГ. Например, 01-12-2000 (1 декабря 2000 г.)'
+        params = {
+            'chat_id': chat_id,
+            'text': text,
+            'reply_markup': {
+                'force_reply': True,
+                'input_field_placeholder': 'ДД-ММ-ГГГГ'
+            }
+        }
+    else:
+        date_to_add = additional_info.strip()
+        column = 'departure_date'
+        params = {
+            'chat_id': chat_id,
+            'text': 'Вы успешно забронировали номер. Просмотреть свои действующие брони можно с помощью команды\
+             /my_suits, а удалить их с помощью /delete. Также все действия доступны из главного меню.'
+        }
+    if not is_valid_date(date_to_add):
+        incorrect_data(chat_id)
+        return
+
+    con = psycopg2.connect(
+        database="hotels",
+        user="bra1n",
+        password="050888",
+        host="localhost",
+        port="5432"
+    )
+    cur = con.cursor()
+    cur.execute(f"UPDATE book SET {column} = '{date_to_add}' WHERE id = \
+    (SELECT id FROM book WHERE client_id = '{user[0]}' ORDER BY id DESC LIMIT 1)")
+    cur.close()
+    con.commit()
+    con.close()
+
+    if column == 'departure_date':
+        correct_db(user[0])
+    header = {'Content-Type': 'application/json'}
+    data = json.dumps(params)
+    requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
 
 
 def pull_data_from_db(query: str) -> list:
@@ -30,10 +114,10 @@ def pull_data_from_db(query: str) -> list:
     )
     cur = con.cursor()
     cur.execute(query)
-    hotels = cur.fetchall()
+    items = cur.fetchall()
     cur.close()
     con.close()
-    return hotels
+    return items
 
 
 def send_list_of_hotels_or_suits(chat_id, command, hotel=None):
@@ -45,6 +129,7 @@ def send_list_of_hotels_or_suits(chat_id, command, hotel=None):
     else:
         items = pull_data_from_db('SELECT name FROM hotel;')
     names = [c[0] for c in items]
+    # form inline keyboard
     keyboard = []
     for i in range(len(names)):
         button = []
@@ -99,6 +184,8 @@ def start_handler(chat_id, *args):
 def book_handler(chat_id, command, name, user: list):
     """
     Allow the user to book a suit. Sets connection to the db and add data to it.
+    :param chat_id: id of the chat for the answer
+    :param command: /book
     :param name: If not None, it can be either the name of a hotel or a composite string 'suit + hotel'.
     :param user: list of the user's id and full name.
     """
@@ -153,7 +240,11 @@ def book_handler(chat_id, command, name, user: list):
 
             params = {
                 'chat_id': chat_id,
-                'text': f'Вы успешно забронировали {suit.lower()} номер в отеле {hotel}!'
+                'text': 'Введите желаемую дату заезда в формате ДД-ММ-ГГГГ. Например, 01-12-2000 (1 декабря 2000 г.)',
+                'reply_markup': {
+                    'force_reply': True,
+                    'input_field_placeholder': 'ДД-ММ-ГГГГ'
+                }
             }
             header = {'Content-Type': 'application/json'}
             data = json.dumps(params)

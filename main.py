@@ -4,6 +4,7 @@ from handlers import *
 token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
 # command: function to call. All these functions are in handlers module
 handlers_dict = {
+            '/dates': 'set_dates',
             '/start': 'start_handler',
             '/restart': 'start_handler',
             '/book': 'book_handler',
@@ -18,6 +19,7 @@ def message_handler(message: json) -> (int, str, str, int, str, str):
     """
     Works on a data from Telegram server update
     """
+    # message is a reply from a button
     if 'callback_query' in message:
         data = message['callback_query']['data']
         for i in range(len(data)):
@@ -32,14 +34,17 @@ def message_handler(message: json) -> (int, str, str, int, str, str):
         user_id = message['callback_query']['from']['id']
         user_first_name = message['callback_query']['from']['first_name']
         user_last_name = message['callback_query']['from']['last_name']
-    elif 'message' in message:
-        command = message['message']['text']
+    # message is a forced reply
+    elif 'message' in message and 'reply_to_message' in message['message']:
+        text = message['message']['text']
+        command = '/dates'
         chat = message['message']['chat']['id']
-        additional = None
+        additional = text if 'окончания' in message['message']['reply_to_message']['text'] else text + ' ' + 'begin'
         user_id = message['message']['from']['id']
         user_first_name = message['message']['from']['first_name']
         user_last_name = message['message']['from']['last_name']
     else:
+        # just a common message
         command = message['message']['text']
         chat = message['message']['chat']['id']
         additional = None
@@ -134,5 +139,6 @@ def get_updates():
             params['offset'] = last_id + 1
 
 
-set_commands()
-get_updates()
+if __name__ == '__main__':
+    set_commands()
+    get_updates()
