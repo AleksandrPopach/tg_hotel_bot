@@ -33,7 +33,10 @@ def message_handler(message: json) -> (int, str, str, int, str, str):
         chat = message['callback_query']['message']['chat']['id']
         user_id = message['callback_query']['from']['id']
         user_first_name = message['callback_query']['from']['first_name']
-        user_last_name = message['callback_query']['from']['last_name']
+        try:
+            user_last_name = message['callback_query']['from']['last_name']
+        except KeyError:
+            user_last_name = 'n/a'
     # message is a forced reply
     elif 'message' in message and 'reply_to_message' in message['message']:
         text = message['message']['text']
@@ -42,7 +45,10 @@ def message_handler(message: json) -> (int, str, str, int, str, str):
         additional = text if 'окончания' in message['message']['reply_to_message']['text'] else text + ' ' + 'begin'
         user_id = message['message']['from']['id']
         user_first_name = message['message']['from']['first_name']
-        user_last_name = message['message']['from']['last_name']
+        try:
+            user_last_name = message['message']['from']['last_name']
+        except KeyError:
+            user_last_name = 'n/a'
     else:
         # just a common message
         command = message['message']['text']
@@ -50,7 +56,10 @@ def message_handler(message: json) -> (int, str, str, int, str, str):
         additional = None
         user_id = message['message']['from']['id']
         user_first_name = message['message']['from']['first_name']
-        user_last_name = message['message']['from']['last_name']
+        try:
+            user_last_name = message['message']['from']['last_name']
+        except KeyError:
+            user_last_name = 'n/a'
     return chat, command, additional, user_id, user_first_name, user_last_name
 
 
@@ -124,7 +133,11 @@ def get_updates():
         if updates['result']:
             for new_message in updates['result']:
                 print(new_message)
-                chat, command, additional_info, *user = message_handler(new_message)
+                try:
+                    chat, command, additional_info, *user = message_handler(new_message)
+                except KeyError as error:
+                    print('There is no such parameter in the message. Info:', error)
+                    continue
                 if command in handlers_dict:
                     handler_to_call = handlers_dict[command]
                     try:

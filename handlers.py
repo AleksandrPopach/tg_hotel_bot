@@ -2,7 +2,7 @@ import requests
 import json
 import psycopg2
 import re
-from datetime import date
+import datetime
 
 token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
 
@@ -50,7 +50,7 @@ def set_dates(chat_id, command, additional_info, user):
             return False
         day, month, year = list(map(int, date_to_check.split('-')))
         try:
-            date(year, month, day)
+            datetime.date(year, month, day)
         except ValueError:
             return False
         else:
@@ -308,9 +308,77 @@ def vacant_handler(chat_id, command, name, *args):
         send_list_of_hotels_or_suits(chat_id, command)
 
 
-def show_suits_handler(*args):
-    print('show_suit_handler is on')
+def show_suits_handler(chat_id, command, additional, user):
+    sql = f"SELECT hotel.name, suit.name, arrival_date, departure_date \
+    FROM hotel JOIN book ON hotel.id = book.hotel_id \
+    JOIN suit ON suit.id = book.suit_id WHERE client_id = {user[0]};"
+    bookings = pull_data_from_db(sql)
+    text = 'Ваши забронированные номера:\n\n'
+    for booking in bookings:
+        hotel = booking[0]
+        suit = booking[1]
+        arrival_date = f'{booking[2].day}.{booking[2].month}.{booking[2].year}'
+        departure_date = f'{booking[3].day}.{booking[3].month}.{booking[3].year}'
+        text_to_add = f'Отель: {hotel}\nНомер: {suit}\nДата заезда: {arrival_date}\nДата отъезда: {departure_date}\n\n'
+        text += text_to_add
+    params = {
+        'chat_id': chat_id,
+        'text': text
+    }
+    header = {'Content-Type': 'application/json'}
+    data = json.dumps(params)
+    requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
 
 
-def delete_suits_handler(*args):
-    print('delete_suit_handler is on')
+def delete_suits_handler(chat_id, command, book_id, user):
+    if book_id:
+        # id of the booking that should be deleted is defined by the user
+        con = psycopg2.connect(
+            database="hotels",
+            user="bra1n",
+            password="050888",
+            host="localhost",
+            port="5432"
+        )
+        cur = con.cursor()
+        cur.execute(f'SELECT hotel_id, suit_id from book WHERE id = {book_id}')
+        hotel_id, suit_id = cur.fetchone()
+        cur.execute(f'DELETE FROM book WHERE id = {book_id}')
+        cur.execute(f'UPDATE hotel_suit SET vacant_amount = vacant_amount + 1 \
+        WHERE hotel_id = {hotel_id} AND suit_id = {suit_id}')
+        cur.close()
+        con.commit()
+        con.close()
+        params = {
+            'chat_id': chat_id,
+            'text': 'Запись удалена.'
+        }
+    else:
+        # send a keyboard to determine which booking is to delete
+        sql = f"SELECT book.id, hotel.name, arrival_date, departure_date \
+            FROM hotel JOIN book ON hotel.id = book.hotel_id \
+            JOIN suit ON suit.id = book.suit_id WHERE client_id = {user[0]};"
+        bookings = pull_data_from_db(sql)
+        # form an inline keyboard
+        keyboard = []
+        for i in range(len(bookings)):
+            button = []
+            button_content = dict()
+            arrival = bookings[i][2]
+            departure = bookings[i][3]
+            dates = f'{arrival.day}.{arrival.month}.{arrival.year} - {departure.day}.{departure.month}.{departure.year}'
+            button_content["text"] = bookings[i][1] + "   " + dates
+            button_content["callback_data"] = command + " " + str(bookings[i][0])
+            button.append(button_content)
+            keyboard.append(button)
+        text = 'Какую бронь хотите удалить?'
+        params = {
+            'chat_id': chat_id,
+            'text': text,
+            'reply_markup': {
+                "inline_keyboard": keyboard
+            }
+        }
+    header = {'Content-Type': 'application/json'}
+    data = json.dumps(params)
+    requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
