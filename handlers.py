@@ -14,13 +14,13 @@ def incorrect_data(chat_id):
     header = {'Content-Type': 'application/json'}
     params = {
         'chat_id': chat_id,
-        'text': "Вы ввели некорректные данные! Внимательно читайте указания и попробуйте снова."
+        'text': "Вы ввели некорректные данные!"
     }
     data = json.dumps(params)
     requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
 
 
-def correct_db(user_id: int):
+def correct_db(user_id: int, decrease_vacant=False):
     """
     Deletes from db all incomplete bookings made by the user. Corrects the amount of vacant suits.
     """
@@ -34,9 +34,10 @@ def correct_db(user_id: int):
     cur = con.cursor()
     cur.execute(f"DELETE FROM book WHERE id IN (SELECT id FROM book \
     WHERE client_id = {user_id} AND (arrival_date IS NULL or departure_date IS NULL))")
-    cur.execute(f"UPDATE hotel_suit SET vacant_amount = vacant_amount - 1 WHERE \
-    hotel_id = (SELECT hotel_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1) AND \
-    suit_id = (SELECT suit_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1)")
+    if decrease_vacant:
+        cur.execute(f"UPDATE hotel_suit SET vacant_amount = vacant_amount - 1 WHERE \
+        hotel_id = (SELECT hotel_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1) AND \
+        suit_id = (SELECT suit_id FROM book WHERE client_id = {user_id} ORDER BY id DESC LIMIT 1)")
     cur.close()
     con.commit()
     con.close()
@@ -50,11 +51,20 @@ def set_dates(chat_id, command, additional_info, user):
             return False
         day, month, year = list(map(int, date_to_check.split('-')))
         try:
-            datetime.date(year, month, day)
+            date_to_check = datetime.date(year, month, day)
         except ValueError:
             return False
-        else:
-            return True
+        today = datetime.date.today()
+        if date_to_check < today:
+            return False
+        query = f"SELECT arrival_date FROM book WHERE id = \
+        (SELECT id FROM book WHERE client_id = '{user[0]}' ORDER BY id DESC LIMIT 1)"
+        previous_date = pull_data_from_db(query)[0][0]
+        # if previous_date == None then date_to_check is arrival_date else departure_date
+        if previous_date and previous_date > date_to_check:
+            # arrival_date > departure_date, incorrect
+            return False
+        return True
 
     if 'begin' in additional_info:
         date_to_add = additional_info[:-6].strip()
@@ -77,6 +87,7 @@ def set_dates(chat_id, command, additional_info, user):
              /my_suits, а удалить их с помощью /delete. Также все действия доступны из главного меню.'
         }
     if not is_valid_date(date_to_add):
+        correct_db(user[0])
         incorrect_data(chat_id)
         return
 
@@ -95,7 +106,8 @@ def set_dates(chat_id, command, additional_info, user):
     con.close()
 
     if column == 'departure_date':
-        correct_db(user[0])
+        correct_db(user[0], True)
+
     header = {'Content-Type': 'application/json'}
     data = json.dumps(params)
     requests.post(f'https://api.telegram.org/bot{token}/sendMessage', headers=header, data=data)
