@@ -1,7 +1,9 @@
 from handlers import *
 
-# the token is given by BotFather bot
-token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
+# the token is given by BotFather bot and hidden in .txt file
+with open('token.txt', 'r', encoding='utf-8') as t, open('password.txt', 'r', encoding='utf-8') as p:
+    token = t.read().strip()
+    password = p.read().strip()
 # command: function to call. All these functions are in handlers module
 handlers_dict = {
             '/dates': 'set_dates',

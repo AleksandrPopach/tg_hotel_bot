@@ -4,7 +4,9 @@ import psycopg2
 import re
 import datetime
 
-token = '5398687279:AAF4t4akIuMjo2Zmrmd2GBX5SGAOg-Ot6as'
+with open('token.txt', 'r', encoding='utf-8') as t, open('password.txt', 'r', encoding='utf-8') as p:
+    token = t.read().strip()
+    password = p.read().strip()
 
 
 def incorrect_data(chat_id):
@@ -27,8 +29,8 @@ def correct_db(user_id: int, decrease_vacant=False):
     con = psycopg2.connect(
         database="hotels",
         user="bra1n",
-        password="050888",
-        host="localhost",
+        password=f"{password}",
+        host="212.193.49.172",
         port="5432"
     )
     cur = con.cursor()
@@ -45,11 +47,11 @@ def correct_db(user_id: int, decrease_vacant=False):
 
 def set_dates(chat_id, command, additional_info, user):
     def is_valid_date(date_to_check: str):
-        pattern = r'\d\d-\d\d-\d\d\d\d'
+        pattern = r'\d\d\d\d-\d\d-\d\d'
         check = re.match(pattern, date_to_check)
         if not check:
             return False
-        day, month, year = list(map(int, date_to_check.split('-')))
+        year, month, day = list(map(int, date_to_check.split('-')))
         try:
             date_to_check = datetime.date(year, month, day)
         except ValueError:
@@ -68,6 +70,9 @@ def set_dates(chat_id, command, additional_info, user):
 
     if 'begin' in additional_info:
         date_to_add = additional_info[:-6].strip()
+        date_list = date_to_add.split('-')
+        date_list.reverse()
+        date_to_add = '-'.join(date_list)
         column = 'arrival_date'
         text = 'Введите желаемую дату окончания заезда в формате ДД-ММ-ГГГГ. Например, 01-12-2000 (1 декабря 2000 г.)'
         params = {
@@ -80,6 +85,9 @@ def set_dates(chat_id, command, additional_info, user):
         }
     else:
         date_to_add = additional_info.strip()
+        date_list = date_to_add.split('-')
+        date_list.reverse()
+        date_to_add = '-'.join(date_list)
         column = 'departure_date'
         params = {
             'chat_id': chat_id,
@@ -94,8 +102,8 @@ def set_dates(chat_id, command, additional_info, user):
     con = psycopg2.connect(
         database="hotels",
         user="bra1n",
-        password="050888",
-        host="localhost",
+        password=f"{password}",
+        host="212.193.49.172",
         port="5432"
     )
     cur = con.cursor()
@@ -120,8 +128,8 @@ def pull_data_from_db(query: str) -> list:
     con = psycopg2.connect(
         database="hotels",
         user="bra1n",
-        password="050888",
-        host="localhost",
+        password=f"{password}",
+        host="212.193.49.172",
         port="5432"
     )
     cur = con.cursor()
@@ -206,8 +214,8 @@ def book_handler(chat_id, command, name, user: list):
         con = psycopg2.connect(
             database="hotels",
             user="bra1n",
-            password="050888",
-            host="localhost",
+            password=f"{password}",
+            host="212.193.49.172",
             port="5432"
         )
         cur = con.cursor()
@@ -348,8 +356,8 @@ def delete_suits_handler(chat_id, command, book_id, user):
         con = psycopg2.connect(
             database="hotels",
             user="bra1n",
-            password="050888",
-            host="localhost",
+            password=f"{password}",
+            host="212.193.49.172",
             port="5432"
         )
         cur = con.cursor()
