@@ -134,7 +134,6 @@ def get_updates():
             continue
         if updates['result']:
             for new_message in updates['result']:
-                print(new_message)
                 try:
                     chat, command, additional_info, *user = message_handler(new_message)
                 except KeyError as error:
